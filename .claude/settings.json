@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(npx create-vite@4.5.0 feature-review-simulator --template react-ts)"
+    ]
+  }
+}
