@@ -2,9 +2,9 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://api.moonshot.ai/v1/(.*)"
+      "destination": "https://api.moonshot.ai/v1/$1"
     },
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -16,10 +16,5 @@
         }
       ]
     }
-  ],
-  "functions": {
-    "index.html": {
-      "excludeFiles": "{assets/**,node_modules/**}"
-    }
-  }
+  ]
 }
