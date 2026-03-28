@@ -3,7 +3,7 @@ import {
   processAndSaveDocument,
   getUserDocuments,
   getDocumentById,
-  softDeleteDocument,
+  permanentlyDeleteDocument,
 } from '../services/document.service';
 import { extractText } from '../services/docParser.service';
 
@@ -86,7 +86,7 @@ export async function deleteDocumentHandler(
 
   const { id } = request.params;
   try {
-    await softDeleteDocument(request.user.userId, id);
+    await permanentlyDeleteDocument(request.user.userId, id);
     return reply.code(204).send();
   } catch (error) {
     if (error instanceof Error && error.message === 'Document not found or unauthorized') {

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || '';
@@ -35,4 +35,13 @@ export async function getDownloadUrl(key: string) {
 
   // 生成 1 小时有效期的预签名 URL
   return await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+}
+
+export async function deleteFromR2(key: string) {
+  const command = new DeleteObjectCommand({
+    Bucket: R2_BUCKET_NAME,
+    Key: key,
+  });
+
+  await s3Client.send(command);
 }

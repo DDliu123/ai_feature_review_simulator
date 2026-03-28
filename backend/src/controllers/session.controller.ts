@@ -129,7 +129,11 @@ export async function streamSessionHandler(
     const reviewPromises = rolesToReview.map(async (role) => {
       try {
         sendEvent('role_start', { role: role.key, status: 'generating' });
-        const questions = await generateReviewForRole(role.systemPrompt, documentText);
+        const questions = await generateReviewForRole(
+          role.systemPrompt,
+          documentText,
+          request.user.userId
+        );
         allGeneratedQuestions.push({ role: role.name, questions });
 
         // 持久化结果
@@ -152,7 +156,7 @@ export async function streamSessionHandler(
 
     // 所有角色完成后进行总结
     if (allGeneratedQuestions.length > 0) {
-      const summary = await summarizeRisks(allGeneratedQuestions);
+      const summary = await summarizeRisks(allGeneratedQuestions, request.user.userId);
       await prisma.reviewSession.update({
         where: { id: sessionId },
         data: { overallStatus: 'IN_PROGRESS', reportUrl: summary }, // 初始状态仍为进行中

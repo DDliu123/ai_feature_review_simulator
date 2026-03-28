@@ -1,128 +1,144 @@
 import OpenAI from 'openai';
 import { SUMMARIZE_PROMPT } from '../lib/roles';
+import { getDefaultAIConfig, getUserAIConfig } from '../lib/aiConfig';
 
-let openaiInstance: OpenAI | null = null;
-
-function getOpenAIClient() {
-  if (!openaiInstance) {
-    if (!process.env.KIMI_API_KEY) {
-      throw new Error('KIMI_API_KEY is not configured in environment variables');
-    }
-    openaiInstance = new OpenAI({
-      apiKey: process.env.KIMI_API_KEY,
-      baseURL: 'https://api.moonshot.cn/v1',
-    });
-  }
-  return openaiInstance;
+interface AIConfig {
+  baseURL: string;
+  apiKey: string;
 }
 
-/**
- * 直接调用 Kimi API（用于代理前端请求）
- */
+const clientCache = new Map<string, OpenAI>();
+const MODEL_NAME = process.env.KIMI_MODEL || 'moonshot-v1-8k';
+
+function resolveAIConfig(userId?: string): AIConfig {
+  const config = userId ? getUserAIConfig(userId) : getDefaultAIConfig();
+  return {
+    baseURL: config.baseURL,
+    apiKey: config.apiKey,
+  };
+}
+
+function getOpenAIClient(userId?: string): OpenAI {
+  const config = resolveAIConfig(userId);
+  if (!config.apiKey) {
+    throw new Error('API key is not configured');
+  }
+
+  const cacheKey = `${config.baseURL}::${config.apiKey}`;
+  let client = clientCache.get(cacheKey);
+  if (!client) {
+    client = new OpenAI({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+    });
+    clientCache.set(cacheKey, client);
+  }
+
+  return client;
+}
+
 export async function callKimiAPI(
   model: string,
   messages: Array<{ role: string; content: string }>,
   max_tokens: number = 8000,
   temperature: number = 0.7,
-  stream: boolean = false
+  stream: boolean = false,
+  userId?: string
 ): Promise<any> {
   try {
-    const openai = getOpenAIClient();
-    const completion = await openai.chat.completions.create({
+    const openai = getOpenAIClient(userId);
+    return await openai.chat.completions.create({
       model,
       messages: messages as any,
       max_tokens,
       temperature,
       stream,
     });
-
-    return completion;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Kimi API call failed:', error);
     throw error;
   }
 }
 
-const MODEL_NAME = 'moonshot-v1-8k';
-
-/**
- * 调用 Kimi API 为单个角色生成评审问题
- */
-export async function generateReviewForRole(systemPrompt: string, documentText: string): Promise<string[]> {
+export async function generateReviewForRole(
+  systemPrompt: string,
+  documentText: string,
+  userId?: string
+): Promise<string[]> {
   try {
-    const openai = getOpenAIClient();
+    const openai = getOpenAIClient(userId);
     const completion = await openai.chat.completions.create({
       model: MODEL_NAME,
       messages: [
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `这是产品需求文档的内容：\n\n---\n${documentText}\n---\n\n请根据你的角色定位，提出问题。`,
+          content: `以下是产品需求文档内容：\n\n---\n${documentText}\n---\n\n请基于你的角色提出关键质疑点。`,
         },
       ],
       temperature: 0.3,
     });
 
     const responseText = completion.choices[0].message.content || '';
-
-    // 将返回的文本按行分割，并过滤掉空行
-    return responseText.split('\n').filter(line => line.trim().startsWith('-'));
-
+    return responseText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('-'));
   } catch (error) {
-    console.error('Kimi API call failed:', error);
+    console.error('Kimi role review failed:', error);
     throw new Error('Failed to generate review from AI model');
   }
 }
 
-/**
- * 调用 Kimi API 总结所有角色的问题
- */
-export async function summarizeRisks(allQuestions: { role: string; questions: string[] }[]): Promise<string> {
+export async function summarizeRisks(
+  allQuestions: { role: string; questions: string[] }[],
+  userId?: string
+): Promise<string> {
   const formattedQuestions = allQuestions
-    .map(q => `角色：${q.role}\n问题：\n${q.questions.join('\n')}`)
+    .map((item) => `角色：${item.role}\n问题：\n${item.questions.join('\n')}`)
     .join('\n\n---\n\n');
 
   try {
-    const openai = getOpenAIClient();
+    const openai = getOpenAIClient(userId);
     const completion = await openai.chat.completions.create({
       model: MODEL_NAME,
       messages: [
         { role: 'system', content: SUMMARIZE_PROMPT },
         {
           role: 'user',
-          content: `这是所有角色提出的问题列表：\n\n---\n${formattedQuestions}\n---\n\n请进行总结分析。`,
+          content: `以下是所有评审角色提出的问题：\n\n---\n${formattedQuestions}\n---\n\n请总结核心风险。`,
         },
       ],
       temperature: 0.3,
     });
 
     return completion.choices[0].message.content || '';
-
   } catch (error) {
-    console.error('Kimi API summarization failed:', error);
+    console.error('Kimi summarization failed:', error);
     throw new Error('Failed to summarize risks from AI model');
   }
 }
 
-/**
- * 调用 Kimi API 进行辩驳对话
- */
 export async function generateChatResponse(
-  systemPrompt: string, 
-  documentText: string, 
-  history: { role: 'user' | 'assistant'; content: string }[]
+  systemPrompt: string,
+  documentText: string,
+  history: { role: 'user' | 'assistant'; content: string }[],
+  userId?: string
 ): Promise<{ content: string; status: string }> {
-  const messages: any[] = [
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: systemPrompt },
     {
       role: 'user',
-      content: `这是产品需求文档的内容：\n\n---\n${documentText}\n---\n\n请基于此文档和你之前的评审意见，与用户进行辩驳。如果你认为用户的解释合理且解决了你提出的风险点，请在回复最后包含 [STATUS: APPROVED]；如果部分解决但仍有疑虑，包含 [STATUS: PARTIAL]；如果仍然存在重大风险，包含 [STATUS: CHALLENGING]。`,
+      content:
+        `以下是产品需求文档内容：\n\n---\n${documentText}\n---\n\n` +
+        '请与用户进行辩驳式澄清。若完全通过，请在结尾加入 [STATUS: APPROVED]；' +
+        '若部分通过，请加入 [STATUS: PARTIAL]；否则加入 [STATUS: CHALLENGING]。',
     },
     ...history,
   ];
 
   try {
-    const openai = getOpenAIClient();
+    const openai = getOpenAIClient(userId);
     const completion = await openai.chat.completions.create({
       model: MODEL_NAME,
       messages,
@@ -130,19 +146,14 @@ export async function generateChatResponse(
     });
 
     const responseText = completion.choices[0].message.content || '';
-
-    // 提取状态
     let status = 'CHALLENGING';
     if (responseText.includes('[STATUS: APPROVED]')) status = 'APPROVED';
     else if (responseText.includes('[STATUS: PARTIAL]')) status = 'PARTIAL';
 
-    // 清理回复文本中的状态标记
     const cleanContent = responseText.replace(/\[STATUS: .*\]/g, '').trim();
-
     return { content: cleanContent, status };
-
   } catch (error) {
-    console.error('Kimi API chat failed:', error);
+    console.error('Kimi chat failed:', error);
     throw new Error('Failed to generate chat response from AI model');
   }
 }

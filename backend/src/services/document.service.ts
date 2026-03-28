@@ -1,5 +1,5 @@
 import prisma from '../db';
-import { uploadToR2, getDownloadUrl } from '../lib/storage';
+import { uploadToR2, getDownloadUrl, deleteFromR2 } from '../lib/storage';
 import { extractText } from './docParser.service';
 
 export async function processAndSaveDocument(
@@ -97,15 +97,49 @@ export async function getDocumentById(userId: string, docId: string) {
   };
 }
 
-export async function softDeleteDocument(userId: string, docId: string) {
+export async function permanentlyDeleteDocument(userId: string, docId: string) {
   const document = await prisma.document.findFirst({
     where: { id: docId, userId },
+    include: {
+      reviewSessions: {
+        select: {
+          id: true,
+          reportUrl: true,
+        },
+      },
+    },
   });
 
   if (!document) throw new Error('Document not found or unauthorized');
 
-  await prisma.document.update({
-    where: { id: docId },
-    data: { deletedAt: new Date() },
+  const sessionIds = document.reviewSessions.map((session) => session.id);
+  const reportKeys = document.reviewSessions
+    .map((session) => session.reportUrl)
+    .filter((reportUrl): reportUrl is string => Boolean(reportUrl && reportUrl.includes('.pdf')));
+
+  await prisma.$transaction(async (transaction) => {
+    if (sessionIds.length > 0) {
+      await transaction.roleThread.deleteMany({
+        where: { sessionId: { in: sessionIds } },
+      });
+      await transaction.reviewSession.deleteMany({
+        where: { id: { in: sessionIds } },
+      });
+    }
+
+    await transaction.document.delete({
+      where: { id: docId },
+    });
   });
+
+  const storageKeys = Array.from(new Set([document.fileUrl, ...reportKeys].filter(Boolean)));
+  await Promise.all(
+    storageKeys.map(async (key) => {
+      try {
+        await deleteFromR2(key);
+      } catch (error) {
+        console.error(`Failed to delete object from R2: ${key}`, error);
+      }
+    })
+  );
 }

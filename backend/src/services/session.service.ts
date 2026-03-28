@@ -65,7 +65,8 @@ export async function chatWithRole(
   const { content: aiResponse, status: newStatus } = await generateChatResponse(
     role.systemPrompt,
     session.document.parsedText || '',
-    historyForAI
+    historyForAI,
+    userId
   );
 
   console.log(`[chatWithRole] AI response received, status: ${newStatus}`);
