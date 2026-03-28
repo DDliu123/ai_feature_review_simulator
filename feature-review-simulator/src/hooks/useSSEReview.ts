@@ -22,14 +22,16 @@ export function useSSEReview(sessionId: string) {
   const retryCountRef = useRef(0);
 
   useEffect(() => {
-    if (!sessionId || !accessToken) return;
+    if (!sessionId) return;
 
     const connect = () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
 
-      const url = `/api/sessions/${sessionId}/stream?token=${accessToken}`;
+      const url = accessToken
+        ? `/api/sessions/${sessionId}/stream?token=${accessToken}`
+        : `/api/sessions/${sessionId}/stream`;
       const es = new EventSource(url);
       eventSourceRef.current = es;
 

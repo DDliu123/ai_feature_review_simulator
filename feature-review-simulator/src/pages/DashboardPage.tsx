@@ -19,7 +19,7 @@ interface AIConfig {
 const FALLBACK_AI_BASE_URL = 'https://api.moonshot.cn/v1';
 
 const DashboardPage: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -79,7 +79,25 @@ const DashboardPage: React.FC = () => {
     fetchAIConfig();
   }, [fetchDocuments, fetchAIConfig]);
 
+  const ensureAIConfigReady = () => {
+    const hasBaseURL = Boolean(apiConfig.baseURL?.trim());
+    const hasApiKey = Boolean(apiConfig.apiKey?.trim());
+    if (hasBaseURL && hasApiKey) {
+      return true;
+    }
+
+    setApiConfigDraft({
+      baseURL: apiConfig.baseURL?.trim() || FALLBACK_AI_BASE_URL,
+      apiKey: apiConfig.apiKey || '',
+    });
+    setIsApiModalOpen(true);
+    setError('清先配置模型API');
+    return false;
+  };
+
   const handleUpload = async (file: File) => {
+    if (!ensureAIConfigReady()) return;
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -99,6 +117,7 @@ const DashboardPage: React.FC = () => {
   };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!ensureAIConfigReady()) return;
     if (e.target.files && e.target.files[0]) {
       handleUpload(e.target.files[0]);
     }
@@ -117,9 +136,15 @@ const DashboardPage: React.FC = () => {
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
+    if (!ensureAIConfigReady()) return;
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleUpload(e.dataTransfer.files[0]);
     }
+  };
+
+  const onUploadAreaClick = () => {
+    if (!ensureAIConfigReady()) return;
+    document.getElementById('fileInput')?.click();
   };
 
   const openReviewModal = (docId: string) => {
@@ -216,12 +241,6 @@ const DashboardPage: React.FC = () => {
                 API设置
               </button>
               <span className="text-sm text-gray-600">{user?.email}</span>
-              <button
-                onClick={logout}
-                className="rounded-md border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                退出登录
-              </button>
             </div>
           </div>
         </header>
@@ -234,7 +253,7 @@ const DashboardPage: React.FC = () => {
             className={`relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 transition-colors ${
               isDragging ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 bg-white hover:border-indigo-400'
             }`}
-            onClick={() => document.getElementById('fileInput')?.click()}
+            onClick={onUploadAreaClick}
           >
             <input
               id="fileInput"

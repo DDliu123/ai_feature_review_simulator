@@ -1,36 +1,14 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
-
-// 导入页面
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import VerifyPage from './pages/VerifyPage';
+import { AuthProvider } from './contexts/AuthContext';
 import DashboardPage from './pages/DashboardPage';
 import ReviewPage from './pages/ReviewPage';
 
 const AppRoutes: React.FC = () => {
-  const { user, isLoading } = useAuth();
-
-  if (isLoading) {
-    return <div className="flex h-screen items-center justify-center">加载中...</div>;
-  }
-
   return (
     <Routes>
-      {/* 根路径重定向 */}
-      <Route
-        path="/"
-        element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />}
-      />
-
-      {/* 公开路由 */}
-      <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/dashboard" replace />} />
-      <Route path="/register" element={!user ? <RegisterPage /> : <Navigate to="/dashboard" replace />} />
-      <Route path="/verify" element={<VerifyPage />} />
-
-      {/* 受保护路由 */}
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route
         path="/dashboard"
         element={
@@ -47,9 +25,7 @@ const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         }
       />
-
-      {/* 404 兜底 */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 };

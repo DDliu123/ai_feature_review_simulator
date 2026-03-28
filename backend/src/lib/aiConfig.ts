@@ -4,7 +4,7 @@ export interface UserAIConfig {
 }
 
 const DEFAULT_BASE_URL = process.env.KIMI_BASE_URL || 'https://api.moonshot.cn/v1';
-const DEFAULT_API_KEY = process.env.KIMI_API_KEY || '';
+const DEFAULT_API_KEY = '';
 
 const userConfigStore = new Map<string, UserAIConfig>();
 
